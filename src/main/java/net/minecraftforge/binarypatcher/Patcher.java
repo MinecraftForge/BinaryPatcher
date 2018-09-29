@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
@@ -114,18 +115,38 @@ public class Patcher {
                             data = patch(data, patch);
                         }
                         if (data.length != 0) {
-                            zpatched.putNextEntry(getNewEntry(entry));
+                            zpatched.putNextEntry(getNewEntry(entry.getName()));
                             zpatched.write(data);
                         }
                     } else if (!patchedOnly) {
                         log("  Copying " + entry.getName());
-                        zpatched.putNextEntry(getNewEntry(entry));
+                        zpatched.putNextEntry(getNewEntry(entry.getName()));
                         IOUtils.copy(zclean, zpatched);
                     }
                 } else if (keepData) {
                     log("  Copying " + entry.getName());
-                    zpatched.putNextEntry(getNewEntry(entry));
+                    zpatched.putNextEntry(getNewEntry(entry.getName()));
                     IOUtils.copy(zclean, zpatched);
+                }
+            }
+
+            // Add new files
+            for (Entry<String, List<Patch>> e : patches.entrySet()) {
+                String key = e.getKey();
+                List<Patch> patchlist = e.getValue();
+
+                if (processed.contains(key))
+                    continue;
+
+                byte[] data = new byte[0];
+                for (int x = 0; x < patchlist.size(); x++) {
+                    Patch patch = patchlist.get(x);
+                    log("  Patching " + patch.srg + "(" + key + ") " + (x+1) + "/" + patchlist.size());
+                    data = patch(data, patch);
+                }
+                if (data.length != 0) {
+                    zpatched.putNextEntry(getNewEntry(key + ".class"));
+                    zpatched.write(data);
                 }
             }
          }
@@ -147,8 +168,8 @@ public class Patcher {
             return PATCHER.patch(data, patch.data);
     }
 
-    private ZipEntry getNewEntry(ZipEntry old) {
-        ZipEntry ret = new ZipEntry(old.getName());
+    private ZipEntry getNewEntry(String name) {
+        ZipEntry ret = new ZipEntry(name);
         ret.setTime(0);
         return ret;
     }
