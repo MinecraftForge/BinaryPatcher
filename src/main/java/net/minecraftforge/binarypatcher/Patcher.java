@@ -158,7 +158,7 @@ public class Patcher {
         if (!patch.exists && data.length > 0)
             throw new IOException("Patch expected " + patch.srg + "(" + patch.obf + ") to not exist, but received " + data.length + " bytes");
 
-        int checksum = adlerHash(data);
+        int checksum = data.length == 0 ? 0 : adlerHash(data);
         if (checksum != patch.checksum)
             throw new IOException("Patch expected " + patch.srg + "(" + patch.obf + ") to have the checksum " + Integer.toHexString(patch.checksum) + " but it was " + Integer.toHexString(checksum));
 
