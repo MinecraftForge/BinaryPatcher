@@ -50,6 +50,16 @@ public class ConsoleTool
             File clean_jar = options.valueOf(clean);
             File output_jar = options.valueOf(output);
 
+            if (output_jar.exists() && !output_jar.delete()) {
+                System.out.println("Could not delete output file: " + output_jar);
+                return;
+            }
+
+            if (!output_jar.getParentFile().exists() && !output_jar.getParentFile().mkdirs()) {
+                System.out.println("Could not make output folders: " + output_jar.getParentFile());
+                return;
+            }
+
             if (options.has(create) && options.has(apply)) {
                 System.out.println("Cannot specify --apply and --create at the same time!");
                 return;
