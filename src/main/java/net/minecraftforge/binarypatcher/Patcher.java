@@ -18,7 +18,6 @@
  */
 package net.minecraftforge.binarypatcher;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -33,7 +32,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
-import java.util.zip.Adler32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -154,13 +152,13 @@ public class Patcher {
 
     private byte[] patch(byte[] data, Patch patch) throws IOException {
         if (patch.exists && data.length == 0)
-            throw new IOException("Patch expected " + patch.srg + "(" + patch.obf + ") to exist, but received empty data");
+            throw new IOException("Patch expected " + patch.getName() + " to exist, but received empty data");
         if (!patch.exists && data.length > 0)
-            throw new IOException("Patch expected " + patch.srg + "(" + patch.obf + ") to not exist, but received " + data.length + " bytes");
+            throw new IOException("Patch expected " + patch.getName() + " to not exist, but received " + data.length + " bytes");
 
-        int checksum = data.length == 0 ? 0 : adlerHash(data);
+        int checksum = patch.checksum(data);
         if (checksum != patch.checksum)
-            throw new IOException("Patch expected " + patch.srg + "(" + patch.obf + ") to have the checksum " + Integer.toHexString(patch.checksum) + " but it was " + Integer.toHexString(checksum));
+            throw new IOException("Patch expected " + patch.getName() + " to have the checksum " + Integer.toHexString(patch.checksum) + " but it was " + Integer.toHexString(checksum));
 
         if (patch.data.length == 0) //File removed
             return EMPTY_DATA;
@@ -173,46 +171,9 @@ public class Patcher {
         ret.setTime(0);
         return ret;
     }
-    private int adlerHash(byte[] input) {
-        Adler32 hasher = new Adler32();
-        hasher.update(input);
-        return (int)hasher.getValue();
-    }
 
     private void log(String message) {
         System.out.println(message);
-    }
-
-    private static class Patch {
-        private static Patch from(InputStream stream) throws IOException {
-            DataInputStream input = new DataInputStream(stream);
-            int version = input.readInt();
-            if (version != 1)
-                throw new IOException("Unsupported patch format: " + version);
-            String obf = input.readUTF();
-            String srg = input.readUTF();
-            boolean exists = input.readBoolean();
-            int checksum = exists ? input.readInt() : 0;
-            int length = input.readInt();
-            byte[] data = new byte[length];
-            input.readFully(data);
-
-            return new Patch(obf, srg, exists, checksum, data);
-        }
-
-        public final String obf; //TODO: Getters if I care...
-        public final String srg;
-        public final boolean exists;
-        public final int checksum;
-        public final byte[] data;
-
-        private Patch(String obf, String srg, boolean exists, int checksum, byte[] data) {
-            this.obf = obf;
-            this.srg = srg;
-            this.exists = exists;
-            this.checksum = checksum;
-            this.data = data;
-        }
     }
 
 }

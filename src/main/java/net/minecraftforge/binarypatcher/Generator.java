@@ -36,7 +36,6 @@ import java.util.TreeSet;
 import java.util.Map.Entry;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Collectors;
-import java.util.zip.Adler32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -44,17 +43,12 @@ import org.apache.commons.io.IOUtils;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
-import com.nothome.delta.Delta;
-
 import joptsimple.internal.Strings;
 import lzma.streams.LzmaOutputStream;
 
 public class Generator {
     public static final String EXTENSION = ".lzma";
     private static final byte[] EMPTY_DATA = new byte[0];
-    private static final Delta DELTA = new Delta();
 
     private final BiMap<String, String> classes = HashBiMap.create();
     private final Set<String> patches = new TreeSet<>();
@@ -119,7 +113,8 @@ public class Generator {
                     byte[] clean = getData(zclean, cls);
                     byte[] dirty = getData(zdirty, cls);
                     if (!Arrays.equals(clean, dirty)) {
-                        byte[] patch = getBinaryPatch(cls, srg, getData(zclean, cls), getData(zdirty, cls));
+                        process(srg, cls);
+                        byte[] patch = Patch.from(cls, srg, getData(zclean, cls), getData(zdirty, cls)).toBytes();
                         binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
                     }
                 }
@@ -133,7 +128,8 @@ public class Generator {
                                 int idx = cls.indexOf('$');
                                 srg = path + '$' + cls.substring(idx + 1);
                             }
-                            byte[] patch = getBinaryPatch(cls, srg, getData(zclean, cls), getData(zdirty, cls));
+                            process(srg, cls);
+                            byte[] patch = Patch.from(cls, srg, getData(zclean, cls), getData(zdirty, cls)).toBytes();
                             binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
                         }
                     } else {
@@ -155,11 +151,6 @@ public class Generator {
         ZipEntry entry = zip.getEntry(cls + ".class");
         return entry == null ? EMPTY_DATA : IOUtils.toByteArray(zip.getInputStream(entry));
     }
-    private int adlerHash(byte[] input) {
-        Adler32 hasher = new Adler32();
-        hasher.update(input);
-        return (int)hasher.getValue();
-    }
     private byte[] createJar(Map<String, byte[]> patches) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (JarOutputStream zout = new JarOutputStream(out)) {
@@ -174,32 +165,6 @@ public class Generator {
         return out.toByteArray();
     }
 
-    // pack200 is deprecated in J11 so we should not use it.
-    // Also, it is designed to compress classfiles in a lossy way... so it's not useful for binpatches....
-    /*
-    private byte[] pack200(byte[] data) throws IOException
-    {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (JarInputStream in = new JarInputStream(new ByteArrayInputStream(data))) {
-
-            Packer packer = Pack200.newPacker();
-
-            Map<String, String> props = packer.properties();
-            props.put(Packer.EFFORT, "9");
-            props.put(Packer.KEEP_FILE_ORDER, Packer.TRUE);
-            props.put(Packer.UNKNOWN_ATTRIBUTE, Packer.PASS);
-
-            final PrintStream err = new PrintStream(System.err);
-            try (OutputStream log = new FileOutputStream(getProject().file("build/" + getName() + "/pack.log"))) {
-                System.setErr(new PrintStream(log));
-                packer.pack(in, out);
-            }
-            System.setErr(err);
-        }
-
-        return out.toByteArray();
-    }
-    */
     private byte[] lzma(byte[] data) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (LzmaOutputStream lzma = new LzmaOutputStream.Builder(out).useEndMarkerMode(true).build()) {
@@ -207,23 +172,14 @@ public class Generator {
         }
         return out.toByteArray();
     }
-    private byte[] getBinaryPatch(String obf, String srg, byte[] clean, byte[] dirty) throws IOException {
-        log("  Processing: " + srg + "(" + obf + ")");
-        byte[] diff = dirty.length == 0 ? EMPTY_DATA : DELTA.compute(clean, dirty);
-        ByteArrayDataOutput out = ByteStreams.newDataOutput(diff.length + obf.length() + srg.length() + 1);
-        out.writeInt(1); //Version -- Future compatibility
-        out.writeUTF(obf); //Obf Name
-        out.writeUTF(srg); //SRG Name
-        if (clean.length == 0) {
-            out.writeBoolean(false); //Exists in clean
-        } else {
-            out.writeBoolean(true); //Exists in clean
-            out.writeInt(adlerHash(clean));
-        }
-        out.writeInt(diff.length); //If removed, diff.length == 0
-        out.write(diff);
-        return out.toByteArray();
+
+    private void process(String srg, String obf) {
+        if (srg.equals(obf))
+            log("Processing " + srg);
+        else
+            log("Processing " + srg + "(" + obf + ")");
     }
+
     private void log(String message) {
         ConsoleTool.log(message);
     }

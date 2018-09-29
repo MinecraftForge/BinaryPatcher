@@ -48,7 +48,7 @@ public class ConsoleTool
             OptionSet options = parser.parse(args);
 
             File clean_jar = options.valueOf(clean);
-            File output_jar = options.valueOf(output);
+            File output_jar = options.valueOf(output).getAbsoluteFile();
 
             if (output_jar.exists() && !output_jar.delete()) {
                 System.out.println("Could not delete output file: " + output_jar);
