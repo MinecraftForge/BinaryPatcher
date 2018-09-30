@@ -113,8 +113,7 @@ public class Generator {
                     byte[] clean = getData(zclean, cls);
                     byte[] dirty = getData(zdirty, cls);
                     if (!Arrays.equals(clean, dirty)) {
-                        process(srg, cls);
-                        byte[] patch = Patch.from(cls, srg, getData(zclean, cls), getData(zdirty, cls)).toBytes();
+                        byte[] patch = process(cls, srg, clean, dirty);
                         binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
                     }
                 }
@@ -128,9 +127,13 @@ public class Generator {
                                 int idx = cls.indexOf('$');
                                 srg = path + '$' + cls.substring(idx + 1);
                             }
-                            process(srg, cls);
-                            byte[] patch = Patch.from(cls, srg, getData(zclean, cls), getData(zdirty, cls)).toBytes();
-                            binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
+
+                            byte[] clean = getData(zclean, cls);
+                            byte[] dirty = getData(zdirty, cls);
+                            if (!Arrays.equals(clean, dirty)) {
+                                byte[] patch = process(cls, srg, clean, dirty);
+                                binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
+                            }
                         }
                     } else {
                         log("Failed: no source for patch? " + path + " " + obf);
@@ -140,7 +143,6 @@ public class Generator {
         }
 
         byte[] data = createJar(binpatches);
-        //data = pack200(data);
         data = lzma(data);
         try (FileOutputStream fos = new FileOutputStream(output)) {
             IOUtils.write(data, fos);
@@ -173,11 +175,15 @@ public class Generator {
         return out.toByteArray();
     }
 
-    private void process(String srg, String obf) {
+    private byte[] process(String obf, String srg, byte[] clean, byte[] dirty) throws IOException {
         if (srg.equals(obf))
             log("Processing " + srg);
         else
             log("Processing " + srg + "(" + obf + ")");
+
+        Patch patch = Patch.from(obf, srg, clean, dirty);
+        log("  Clean: " + Integer.toHexString(patch.checksum(clean)) + " Dirty: " + Integer.toHexString(patch.checksum(dirty)));
+        return patch.toBytes();
     }
 
     private void log(String message) {

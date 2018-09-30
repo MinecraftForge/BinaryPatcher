@@ -83,6 +83,7 @@ public class Patcher {
                 if (entry.getName().endsWith(".binpatch")) {
                     log("  Reading patch " + entry.getName());
                     Patch patch = Patch.from(jar);
+                    log("    Checksum: " + Integer.toHexString(patch.checksum) + " Exists: " + patch.exists);
                     patches.computeIfAbsent(patch.obf, k -> new ArrayList<>()).add(patch);
                 }
             }
@@ -109,7 +110,7 @@ public class Patcher {
                         byte[] data = IOUtils.toByteArray(zclean);
                         for (int x = 0; x < patchlist.size(); x++) {
                             Patch patch = patchlist.get(x);
-                            log("  Patching " + patch.srg + "(" + key + ") " + (x+1) + "/" + patchlist.size());
+                            log("  Patching " + patch.getName() + " " + (x+1) + "/" + patchlist.size());
                             data = patch(data, patch);
                         }
                         if (data.length != 0) {
@@ -139,7 +140,7 @@ public class Patcher {
                 byte[] data = new byte[0];
                 for (int x = 0; x < patchlist.size(); x++) {
                     Patch patch = patchlist.get(x);
-                    log("  Patching " + patch.srg + "(" + key + ") " + (x+1) + "/" + patchlist.size());
+                    log("  Patching " + patch.getName() + " " + (x+1) + "/" + patchlist.size());
                     data = patch(data, patch);
                 }
                 if (data.length != 0) {

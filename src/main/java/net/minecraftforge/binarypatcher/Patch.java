@@ -53,15 +53,12 @@ public class Patch {
 
     public byte[] toBytes() {
         ByteArrayDataOutput out = ByteStreams.newDataOutput(data.length + obf.length() + srg.length() + 1);
-        out.writeInt(1); //Version -- Future compatibility
+        out.writeByte(1); //Version -- Future compatibility
         out.writeUTF(obf); //Obf Name
         out.writeUTF(srg); //SRG Name
-        if (exists) {
-            out.writeBoolean(false); //Exists in clean
-        } else {
-            out.writeBoolean(true); //Exists in clean
+        out.writeBoolean(exists); //Exists in clean
+        if (exists)
             out.writeInt(checksum); //Adler32
-        }
         out.writeInt(data.length); //If removed, diff.length == 0
         out.write(data);
         return out.toByteArray();
@@ -69,7 +66,7 @@ public class Patch {
 
     public static Patch from(InputStream stream) throws IOException {
         DataInputStream input = new DataInputStream(stream);
-        int version = input.readInt();
+        int version = input.readByte() & 0xFF;
         if (version != 1)
             throw new IOException("Unsupported patch format: " + version);
         String obf = input.readUTF();
