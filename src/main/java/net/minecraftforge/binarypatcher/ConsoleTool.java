@@ -20,6 +20,8 @@ package net.minecraftforge.binarypatcher;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.TimeZone;
+
 import joptsimple.OptionException;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -27,8 +29,10 @@ import joptsimple.OptionSpec;
 
 public class ConsoleTool
 {
+    public static final long ZIPTIME = 628041600000L;
     public static void main(String[] args) throws IOException
     {
+        TimeZone.setDefault(TimeZone.getTimeZone("GMT")); //Fix Java stupidity that causes timestamps in zips to depend on user's timezone!
         OptionParser parser = new OptionParser();
         // Shared arguments
         OptionSpec<File> clean = parser.accepts("clean").withRequiredArg().ofType(File.class).required();

@@ -169,7 +169,7 @@ public class Patcher {
 
     private ZipEntry getNewEntry(String name) {
         ZipEntry ret = new ZipEntry(name);
-        ret.setTime(628070400000L);
+        ret.setTime(ConsoleTool.ZIPTIME);
         return ret;
     }
 

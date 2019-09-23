@@ -158,7 +158,7 @@ public class Generator {
         try (JarOutputStream zout = new JarOutputStream(out)) {
             for (Entry<String, byte[]> e : patches.entrySet()) {
                 ZipEntry entry = new ZipEntry(e.getKey());
-                entry.setTime(628070400000L);
+                entry.setTime(ConsoleTool.ZIPTIME);
                 zout.putNextEntry(entry);
                 zout.write(e.getValue());
                 zout.closeEntry();
