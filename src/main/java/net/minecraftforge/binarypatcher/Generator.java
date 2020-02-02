@@ -115,7 +115,7 @@ public class Generator {
                     byte[] dirty = getData(zdirty, cls);
                     if (!Arrays.equals(clean, dirty)) {
                         byte[] patch = process(cls, srg, clean, dirty);
-                        binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
+                        binpatches.put(toJarName(srg), patch);
                     }
                 }
             } else {
@@ -133,7 +133,7 @@ public class Generator {
                             byte[] dirty = getData(zdirty, cls);
                             if (!Arrays.equals(clean, dirty)) {
                                 byte[] patch = process(cls, srg, clean, dirty);
-                                binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
+                                binpatches.put(toJarName(srg), patch);
                             }
                         }
                     } else {
@@ -148,6 +148,10 @@ public class Generator {
         try (FileOutputStream fos = new FileOutputStream(output)) {
             IOUtils.write(data, fos);
         }
+    }
+
+    private String toJarName(String original) {
+        return original.replace('/', '.') + ".binpatch";
     }
 
     private byte[] getData(ZipFile zip, String cls) throws IOException {

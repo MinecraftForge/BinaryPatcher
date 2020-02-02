@@ -7,3 +7,4 @@
 .classpath
 .project
 *.lzma
+!/src/test/resources/example_data.lzma
