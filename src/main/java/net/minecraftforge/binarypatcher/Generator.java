@@ -36,6 +36,7 @@ import java.util.TreeSet;
 import java.util.Map.Entry;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Collectors;
+import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -114,7 +115,7 @@ public class Generator {
                     byte[] dirty = getData(zdirty, cls);
                     if (!Arrays.equals(clean, dirty)) {
                         byte[] patch = process(cls, srg, clean, dirty);
-                        binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
+                        binpatches.put(toJarName(srg), patch);
                     }
                 }
             } else {
@@ -132,7 +133,7 @@ public class Generator {
                             byte[] dirty = getData(zdirty, cls);
                             if (!Arrays.equals(clean, dirty)) {
                                 byte[] patch = process(cls, srg, clean, dirty);
-                                binpatches.put(srg.replace('/', '.') + ".binpatch", patch);
+                                binpatches.put(toJarName(srg), patch);
                             }
                         }
                     } else {
@@ -149,6 +150,10 @@ public class Generator {
         }
     }
 
+    private String toJarName(String original) {
+        return original.replace('/', '.') + ".binpatch";
+    }
+
     private byte[] getData(ZipFile zip, String cls) throws IOException {
         ZipEntry entry = zip.getEntry(cls + ".class");
         return entry == null ? EMPTY_DATA : IOUtils.toByteArray(zip.getInputStream(entry));
@@ -156,6 +161,7 @@ public class Generator {
     private byte[] createJar(Map<String, byte[]> patches) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (JarOutputStream zout = new JarOutputStream(out)) {
+            zout.setLevel(Deflater.NO_COMPRESSION); //Don't deflate-compress, otherwise LZMA won't be as effective
             for (Entry<String, byte[]> e : patches.entrySet()) {
                 ZipEntry entry = new ZipEntry(e.getKey());
                 entry.setTime(ConsoleTool.ZIPTIME);
