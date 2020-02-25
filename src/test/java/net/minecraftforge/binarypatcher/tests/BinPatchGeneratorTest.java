@@ -55,7 +55,7 @@ public class BinPatchGeneratorTest {
     private static Map<String, byte[]> loadPatches(File file) throws Exception {
         Patcher patcher = new Patcher(null, null); //To read to example patches
         Whitebox.setInternalState(patcher, "patches", new TreeMap<>()); //Set to a tree map to preserve order to rebuild an identical file
-        Whitebox.invokeMethod(patcher, "loadPatches", file);
+        Whitebox.invokeMethod(patcher, "loadPatches", file, null);
         Map<String, List<Patch>> patches = Whitebox.getInternalState(patcher, "patches");
         Map<String, byte[]> patchesProcessed = new TreeMap<>(); //preserve order
         for (Map.Entry<String, List<Patch>> entry : patches.entrySet()) {
@@ -69,7 +69,7 @@ public class BinPatchGeneratorTest {
 
     private static byte[] writePatches(Map<String, byte[]> patches) throws Exception {
         Map<String, byte[]> sortedMap = new TreeMap<>(); //preserve order
-        Generator generator = new Generator(null, null, null); //dummy for writing patches
+        Generator generator = new Generator(null); //dummy for writing patches
         for (Map.Entry<String, byte[]> entry : patches.entrySet())
             sortedMap.put(Whitebox.invokeMethod(generator, "toJarName", entry.getKey()), entry.getValue());
         byte[] jarData = Whitebox.invokeMethod(generator, "createJar", sortedMap);

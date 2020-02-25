@@ -18,6 +18,8 @@
  */
 package net.minecraftforge.binarypatcher;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -32,6 +34,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Pack200;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -54,35 +58,66 @@ public class Patcher {
     private final File output;
     private boolean keepData = false;
     private boolean patchedOnly = false;
+    private boolean pack200 = false;
+    private boolean legacy = false;
 
     public Patcher(File clean, File output) {
         this.clean = clean;
         this.output = output;
     }
 
-    public void keepData(boolean value) {
+    public Patcher keepData(boolean value) {
         this.keepData = value;
+        return this;
     }
 
-    public void includeUnpatched(boolean value) {
+    public Patcher includeUnpatched(boolean value) {
         this.patchedOnly = !value;
+        return this;
+    }
+
+    public Patcher pack200() {
+        return pack200(true);
+    }
+
+    public Patcher pack200(boolean value) {
+        this.pack200 = value;
+        return this;
+    }
+
+    public Patcher legacy() {
+        return this.legacy(true);
+    }
+
+    public Patcher legacy(boolean value) {
+        this.legacy = value;
+        return this;
     }
 
     // This can be called multiple times, if patchsets are built on top of eachother.
     // They will be applied in the order that the patch files were loaded.
-    public void loadPatches(File file) throws IOException {
+    public void loadPatches(File file, String prefix) throws IOException {
         log("Loading patches file: " + file);
 
-
         try (InputStream input = new FileInputStream(file)) {
-            LzmaInputStream decompressed = new LzmaInputStream(input, new Decoder());
-            JarInputStream jar = new JarInputStream(decompressed);
+            InputStream stream = new LzmaInputStream(input, new Decoder());
+
+            if (pack200) {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (JarOutputStream jos = new JarOutputStream(bos)) {
+                    Pack200.newUnpacker().unpack(stream, jos);
+                }
+                stream = new ByteArrayInputStream(bos.toByteArray());
+            }
+
+            JarInputStream jar = new JarInputStream(stream);
 
             JarEntry entry;
             while ((entry = jar.getNextJarEntry()) != null) {
-                if (entry.getName().endsWith(".binpatch")) {
+                String name = entry.getName();
+                if (name.endsWith(".binpatch") && (prefix == null || name.startsWith(prefix + '/'))) {
                     log("  Reading patch " + entry.getName());
-                    Patch patch = Patch.from(jar);
+                    Patch patch = Patch.from(jar, this.legacy);
                     log("    Checksum: " + Integer.toHexString(patch.checksum) + " Exists: " + patch.exists);
                     patches.computeIfAbsent(patch.obf, k -> new ArrayList<>()).add(patch);
                 }

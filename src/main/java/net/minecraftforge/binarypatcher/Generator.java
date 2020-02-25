@@ -18,12 +18,15 @@
  */
 package net.minecraftforge.binarypatcher;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -31,10 +34,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Map.Entry;
+import java.util.jar.JarInputStream;
 import java.util.jar.JarOutputStream;
+import java.util.jar.Pack200;
+import java.util.jar.Pack200.Packer;
 import java.util.stream.Collectors;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
@@ -44,6 +51,8 @@ import org.apache.commons.io.IOUtils;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import com.google.common.io.ByteStreams;
+
 import joptsimple.internal.Strings;
 import lzma.streams.LzmaOutputStream;
 
@@ -54,15 +63,46 @@ public class Generator {
     private final BiMap<String, String> classes = HashBiMap.create();
     private final Set<String> patches = new TreeSet<>();
 
-    private final File clean;
-    private final File dirty;
     private final File output;
+    private final List<PatchSet> sets = new ArrayList<>();
+    private boolean pack200 = false;
+    private boolean legacy = false;
 
-
-    public Generator(File clean, File dirty, File output) {
-        this.clean = clean;
-        this.dirty = dirty;
+    public Generator(File output) {
         this.output = output;
+    }
+
+    public Generator addSet(File clean, File dirty, String prefix) {
+        if (!sets.isEmpty()) {
+            String oldPre = sets.get(0).prefix;
+            if (oldPre == null || oldPre.isEmpty() || prefix == null || prefix.isEmpty())
+                throw new IllegalArgumentException("Must specify a prefix when creating multiple patchsets in a single output");
+            if (sets.stream().map(e -> e.prefix).anyMatch(prefix::equals))
+                throw new IllegalArgumentException("Invalid duplicate prefix " + prefix);
+        }
+        if (prefix != null && prefix.isEmpty())
+            throw new IllegalArgumentException("Invalid empty prefix");
+
+        sets.add(new PatchSet(clean, dirty, prefix));
+        return this;
+    }
+
+    public Generator pack200() {
+        return this.pack200(true);
+    }
+
+    public Generator pack200(boolean value) {
+        this.pack200 = value;
+        return this;
+    }
+
+    public Generator legacy() {
+        return this.legacy(true);
+    }
+
+    public Generator legacy(boolean value) {
+        this.legacy = value;
+        return this;
     }
 
     public void loadMappings(File srg) throws IOException {
@@ -85,12 +125,29 @@ public class Generator {
     }
 
     public void create() throws IOException {
+        Map<String, byte[]> binpatches = new TreeMap<>();
+        for (PatchSet set : sets) {
+            Map<String, byte[]> tmp = gatherPatches(set.clean, set.dirty);
+            if (set.prefix == null)
+                binpatches.putAll(tmp);
+            else
+                tmp.forEach((key,value) -> binpatches.put(set.prefix + '/' + key, value));
+        }
 
+        byte[] data = createJar(binpatches);
+        if (pack200)
+            data = pack200(data);
+        data = lzma(data);
+        try (FileOutputStream fos = new FileOutputStream(output)) {
+            IOUtils.write(data, fos);
+        }
+    }
+
+    private Map<String, byte[]> gatherPatches(File clean, File dirty) throws IOException {
         Map<String, byte[]> binpatches = new TreeMap<>();
         try (ZipFile zclean = new ZipFile(clean);
-             ZipFile zdirty = new ZipFile(dirty)){
+            ZipFile zdirty = new ZipFile(dirty)){
 
-            log("Gathering class names");
             Map<String, Set<String>> entries = new HashMap<>();
             Collections.list(zclean.entries()).stream().map(e -> e.getName()).filter(e -> e.endsWith(".class")).map(e -> e.substring(0, e.length() - 6)).forEach(e -> {
                 int idx = e.indexOf('$');
@@ -107,14 +164,16 @@ public class Generator {
                     entries.computeIfAbsent(e, k -> new HashSet<>()).add(e);
             });
 
-            log("Creating patches");
+            log("Creating patches:");
+            log("  Clean: " + clean);
+            log("  Dirty: " + dirty);
             if (patches.isEmpty()) { //No patches, assume full set!
                 for (String cls : entries.keySet()) {
-                    String srg = classes.inverse().getOrDefault(cls, cls);
-                    byte[] clean = getData(zclean, cls);
-                    byte[] dirty = getData(zdirty, cls);
-                    if (!Arrays.equals(clean, dirty)) {
-                        byte[] patch = process(cls, srg, clean, dirty);
+                   String srg = classes.inverse().getOrDefault(cls, cls);
+                    byte[] cleanData = getData(zclean, cls);
+                    byte[] dirtyData = getData(zdirty, cls);
+                    if (!Arrays.equals(cleanData, dirtyData)) {
+                        byte[] patch = process(cls, srg, cleanData, dirtyData);
                         binpatches.put(toJarName(srg), patch);
                     }
                 }
@@ -129,25 +188,20 @@ public class Generator {
                                 srg = path + '$' + cls.substring(idx + 1);
                             }
 
-                            byte[] clean = getData(zclean, cls);
-                            byte[] dirty = getData(zdirty, cls);
-                            if (!Arrays.equals(clean, dirty)) {
-                                byte[] patch = process(cls, srg, clean, dirty);
+                            byte[] cleanData = getData(zclean, cls);
+                            byte[] dirtyData = getData(zdirty, cls);
+                            if (!Arrays.equals(cleanData, dirtyData)) {
+                                byte[] patch = process(cls, srg, cleanData, dirtyData);
                                 binpatches.put(toJarName(srg), patch);
                             }
                         }
                     } else {
-                        log("Failed: no source for patch? " + path + " " + obf);
+                        log("  Failed: no source for patch? " + path + " " + obf);
                     }
                 }
             }
         }
-
-        byte[] data = createJar(binpatches);
-        data = lzma(data);
-        try (FileOutputStream fos = new FileOutputStream(output)) {
-            IOUtils.write(data, fos);
-        }
+        return binpatches;
     }
 
     private String toJarName(String original) {
@@ -173,27 +227,64 @@ public class Generator {
         return out.toByteArray();
     }
 
+    private byte[] pack200(byte[] data) throws IOException {
+        try (JarInputStream in = new JarInputStream(new ByteArrayInputStream(data));
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+
+            Packer packer = Pack200.newPacker();
+
+            SortedMap<String, String> props = packer.properties();
+            props.put(Packer.EFFORT, "9");
+            props.put(Packer.KEEP_FILE_ORDER, Packer.TRUE);
+            props.put(Packer.UNKNOWN_ATTRIBUTE, Packer.PASS);
+
+            final PrintStream err = new PrintStream(System.err);
+            System.setErr(new PrintStream(ByteStreams.nullOutputStream()));
+            packer.pack(in, out);
+            System.setErr(err);
+
+            out.flush();
+
+            byte[] ret = out.toByteArray();
+            log("Pack: " + data.length + " -> " + ret.length);
+            return ret;
+        }
+    }
+
     private byte[] lzma(byte[] data) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (LzmaOutputStream lzma = new LzmaOutputStream.Builder(out).useEndMarkerMode(true).build()) {
             lzma.write(data);
         }
-        return out.toByteArray();
+        byte[] ret = out.toByteArray();
+        log("LZMA: " + data.length + " -> " + ret.length);
+        return ret;
     }
 
     private byte[] process(String obf, String srg, byte[] clean, byte[] dirty) throws IOException {
         if (srg.equals(obf))
-            log("Processing " + srg);
+            log("  Processing " + srg);
         else
-            log("Processing " + srg + "(" + obf + ")");
+            log("  Processing " + srg + "(" + obf + ")");
 
         Patch patch = Patch.from(obf, srg, clean, dirty);
-        log("  Clean: " + Integer.toHexString(patch.checksum(clean)) + " Dirty: " + Integer.toHexString(patch.checksum(dirty)));
-        return patch.toBytes();
+        log("    Clean: " + Integer.toHexString(patch.checksum(clean)) + " Dirty: " + Integer.toHexString(patch.checksum(dirty)));
+        return patch.toBytes(this.legacy);
     }
 
     private void log(String message) {
         ConsoleTool.log(message);
     }
 
+    private static class PatchSet {
+        private final String prefix;
+        private final File clean;
+        private final File dirty;
+
+        private PatchSet(File clean, File dirty, String prefix) {
+            this.clean = clean;
+            this.dirty = dirty;
+            this.prefix = prefix;
+        }
+    }
 }

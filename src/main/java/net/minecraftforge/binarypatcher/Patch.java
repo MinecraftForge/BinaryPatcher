@@ -52,10 +52,19 @@ public class Patch {
     }
 
     public byte[] toBytes() {
+        return toBytes(false);
+    }
+    public byte[] toBytes(boolean legacy) {
         ByteArrayDataOutput out = ByteStreams.newDataOutput(data.length + obf.length() + srg.length() + 1);
-        out.writeByte(1); //Version -- Future compatibility
-        out.writeUTF(obf); //Obf Name
-        out.writeUTF(srg); //SRG Name
+        if (legacy) {
+            out.writeUTF(obf);
+            out.writeUTF(obf.replace('/', '.'));
+            out.writeUTF(srg.replace('/', '.'));
+        } else {
+            out.writeByte(1); //Version -- Future compatibility
+            out.writeUTF(obf);
+            out.writeUTF(srg);
+        }
         out.writeBoolean(exists); //Exists in clean
         if (exists)
             out.writeInt(checksum); //Adler32
@@ -65,12 +74,25 @@ public class Patch {
     }
 
     public static Patch from(InputStream stream) throws IOException {
+        return from(stream, false);
+    }
+    public static Patch from(InputStream stream, boolean legacy) throws IOException {
         DataInputStream input = new DataInputStream(stream);
-        int version = input.readByte() & 0xFF;
-        if (version != 1)
-            throw new IOException("Unsupported patch format: " + version);
-        String obf = input.readUTF();
-        String srg = input.readUTF();
+        int version = -1;
+        String obf, srg;
+
+        if (legacy) {
+            obf = input.readUTF();
+            input.readUTF(); //Useless repeat of obf
+            srg = input.readUTF().replace('.', '/');
+        } else {
+            version = input.readByte() & 0xFF;
+            if (version != 1)
+                throw new IOException("Unsupported patch format: " + version);
+            obf = input.readUTF();
+            srg = input.readUTF();
+        }
+
         boolean exists = input.readBoolean();
         int checksum = exists ? input.readInt() : 0;
         int length = input.readInt();
