@@ -174,7 +174,8 @@ public class Generator {
                     byte[] dirtyData = getData(zdirty, cls);
                     if (!Arrays.equals(cleanData, dirtyData)) {
                         byte[] patch = process(cls, srg, cleanData, dirtyData);
-                        binpatches.put(toJarName(srg), patch);
+                        if (patch != null)
+                            binpatches.put(toJarName(srg), patch);
                     }
                 }
             } else {
@@ -192,7 +193,8 @@ public class Generator {
                             byte[] dirtyData = getData(zdirty, cls);
                             if (!Arrays.equals(cleanData, dirtyData)) {
                                 byte[] patch = process(cls, srg, cleanData, dirtyData);
-                                binpatches.put(toJarName(srg), patch);
+                                if (patch != null)
+                                    binpatches.put(toJarName(srg), patch);
                             }
                         }
                     } else {

@@ -57,6 +57,8 @@ public class Patch {
     public byte[] toBytes(boolean legacy) {
         ByteArrayDataOutput out = ByteStreams.newDataOutput(data.length + obf.length() + srg.length() + 1);
         if (legacy) {
+            if (data.length == 0)
+                return null; //Legacy doesn't support deleting, so just skip
             out.writeUTF(obf);
             out.writeUTF(obf.replace('/', '.'));
             out.writeUTF(srg.replace('/', '.'));
