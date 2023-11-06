@@ -1,20 +1,6 @@
 /*
- * BinaryPatcher
- * Copyright (c) 2016-2018.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation version 2.1
- * of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ * Copyright (c) Forge Development LLC
+ * SPDX-License-Identifier: LGPL-2.1-only
  */
 package net.minecraftforge.binarypatcher;
 
@@ -32,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
 import java.util.jar.JarOutputStream;
@@ -39,8 +26,6 @@ import java.util.jar.Pack200;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
-
-import org.apache.commons.io.IOUtils;
 
 import com.nothome.delta.GDiffPatcher;
 
@@ -52,7 +37,7 @@ public class Patcher {
     private static final byte[] EMPTY_DATA = new byte[0];
     private static final GDiffPatcher PATCHER = new GDiffPatcher();
 
-    private Map<String, List<Patch>> patches = new HashMap<>();
+    private Map<String, List<Patch>> patches = new TreeMap<>();
 
     private final File clean;
     private final File output;
@@ -142,7 +127,7 @@ public class Patcher {
                     List<Patch> patchlist  = patches.get(key);
                     if (patchlist != null) {
                         processed.add(key);
-                        byte[] data = IOUtils.toByteArray(zclean);
+                        byte[] data = Util.toByteArray(zclean);
                         for (int x = 0; x < patchlist.size(); x++) {
                             Patch patch = patchlist.get(x);
                             log("  Patching " + patch.getName() + " " + (x+1) + "/" + patchlist.size());
@@ -155,12 +140,12 @@ public class Patcher {
                     } else if (!patchedOnly) {
                         log("  Copying " + entry.getName());
                         zpatched.putNextEntry(getNewEntry(entry.getName()));
-                        IOUtils.copy(zclean, zpatched);
+                        Util.copy(zclean, zpatched);
                     }
                 } else if (keepData) {
                     log("  Copying " + entry.getName());
                     zpatched.putNextEntry(getNewEntry(entry.getName()));
-                    IOUtils.copy(zclean, zpatched);
+                    Util.copy(zclean, zpatched);
                 }
             }
 
@@ -210,6 +195,15 @@ public class Patcher {
 
     private void log(String message) {
         System.out.println(message);
+    }
+
+    // Public for testing
+    public Map<String, List<Patch>> getPatches() {
+        Map<String, List<Patch>> ret = new HashMap<>();
+        patches.forEach((k,v) ->
+            ret.computeIfAbsent(k, a -> new ArrayList<>()).addAll(v)
+        );
+        return ret;
     }
 
 }

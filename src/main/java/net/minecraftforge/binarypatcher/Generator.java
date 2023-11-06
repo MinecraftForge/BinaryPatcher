@@ -1,20 +1,6 @@
 /*
- * BinaryPatcher
- * Copyright (c) 2016-2018.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation version 2.1
- * of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ * Copyright (c) Forge Development LLC
+ * SPDX-License-Identifier: LGPL-2.1-only
  */
 package net.minecraftforge.binarypatcher;
 
@@ -23,8 +9,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,25 +28,19 @@ import java.util.jar.JarInputStream;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Pack200;
 import java.util.jar.Pack200.Packer;
-import java.util.stream.Collectors;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import org.apache.commons.io.IOUtils;
-
-import com.google.common.collect.BiMap;
-import com.google.common.collect.HashBiMap;
-import com.google.common.io.ByteStreams;
-
-import joptsimple.internal.Strings;
 import lzma.streams.LzmaOutputStream;
+import net.minecraftforge.srgutils.IMappingFile;
 
 public class Generator {
     public static final String EXTENSION = ".lzma";
     private static final byte[] EMPTY_DATA = new byte[0];
 
-    private final BiMap<String, String> classes = HashBiMap.create();
+    private final Map<String, String> o2m = new HashMap<>();
+    private final Map<String, String> m2o = new HashMap<>();
     private final Set<String> patches = new TreeSet<>();
 
     private final File output;
@@ -106,13 +86,11 @@ public class Generator {
     }
 
     public void loadMappings(File srg) throws IOException {
-        List<String> lines = com.google.common.io.Files.readLines(srg, StandardCharsets.UTF_8).stream()
-                .map(line -> line.split("#")[0]).filter(l -> !Strings.isNullOrEmpty(l.trim())).collect(Collectors.toList()); //Strip comments and empty lines
-        lines.stream()
-        .filter(line -> !line.startsWith("\t") || (line.indexOf(':') != -1 && line.startsWith("CL:"))) // Class lines only
-        .map(line -> line.indexOf(':') != -1 ? line.substring(4).split(" ") : line.split(" ")) //Convert to: OBF SRG
-        .filter(pts -> pts.length == 2 && !pts[0].endsWith("/")) //Skip packages
-        .forEach(pts -> classes.put(pts[0], pts[1]));
+        IMappingFile map = IMappingFile.load(srg);
+        map.getClasses().forEach(cls -> {
+            o2m.put(cls.getOriginal(), cls.getMapped());
+            m2o.put(cls.getOriginal(), cls.getMapped());
+        });
     }
 
     public void loadPatches(File root) throws IOException {
@@ -139,7 +117,7 @@ public class Generator {
             data = pack200(data);
         data = lzma(data);
         try (FileOutputStream fos = new FileOutputStream(output)) {
-            IOUtils.write(data, fos);
+            fos.write(data);
         }
     }
 
@@ -169,7 +147,7 @@ public class Generator {
             log("  Dirty: " + dirty);
             if (patches.isEmpty()) { //No patches, assume full set!
                 for (String cls : entries.keySet()) {
-                   String srg = classes.inverse().getOrDefault(cls, cls);
+                   String srg = m2o.getOrDefault(cls, cls);
                     byte[] cleanData = getData(zclean, cls);
                     byte[] dirtyData = getData(zdirty, cls);
                     if (!Arrays.equals(cleanData, dirtyData)) {
@@ -180,10 +158,10 @@ public class Generator {
                 }
             } else {
                 for (String path : patches) {
-                    String obf = classes.getOrDefault(path, path);
+                    String obf = o2m.getOrDefault(path, path);
                     if (entries.containsKey(obf)) {
                         for (String cls : entries.get(obf)) {
-                            String srg = classes.inverse().get(cls);
+                            String srg = m2o.get(cls);
                             if (srg == null) {
                                 int idx = cls.indexOf('$');
                                 srg = path + '$' + cls.substring(idx + 1);
@@ -206,15 +184,17 @@ public class Generator {
         return binpatches;
     }
 
-    private String toJarName(String original) {
+    // public for testing
+    public String toJarName(String original) {
         return original.replace('/', '.') + ".binpatch";
     }
 
     private byte[] getData(ZipFile zip, String cls) throws IOException {
         ZipEntry entry = zip.getEntry(cls + ".class");
-        return entry == null ? EMPTY_DATA : IOUtils.toByteArray(zip.getInputStream(entry));
+        return entry == null ? EMPTY_DATA : Util.toByteArray(zip.getInputStream(entry));
     }
-    private byte[] createJar(Map<String, byte[]> patches) throws IOException {
+    // public for testing
+    public byte[] createJar(Map<String, byte[]> patches) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (JarOutputStream zout = new JarOutputStream(out)) {
             zout.setLevel(Deflater.NO_COMPRESSION); //Don't deflate-compress, otherwise LZMA won't be as effective
@@ -241,7 +221,7 @@ public class Generator {
             props.put(Packer.UNKNOWN_ATTRIBUTE, Packer.PASS);
 
             final PrintStream err = new PrintStream(System.err);
-            System.setErr(new PrintStream(ByteStreams.nullOutputStream()));
+            System.setErr(new PrintStream(NULL));
             packer.pack(in, out);
             System.setErr(err);
 
@@ -253,7 +233,8 @@ public class Generator {
         }
     }
 
-    private byte[] lzma(byte[] data) throws IOException {
+    // public for testing
+    public byte[] lzma(byte[] data) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (LzmaOutputStream lzma = new LzmaOutputStream.Builder(out).useEndMarkerMode(true).build()) {
             lzma.write(data);
@@ -289,4 +270,10 @@ public class Generator {
             this.prefix = prefix;
         }
     }
+
+    private static OutputStream NULL = new OutputStream() {
+        @Override
+        public void write(int b) throws IOException {
+        }
+    };
 }

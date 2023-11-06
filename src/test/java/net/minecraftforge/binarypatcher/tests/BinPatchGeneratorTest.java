@@ -1,20 +1,6 @@
 /*
- * BinaryPatcher
- * Copyright (c) 2016-2018.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation version 2.1
- * of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ * Copyright (c) Forge Development LLC
+ * SPDX-License-Identifier: LGPL-2.1-only
  */
 package net.minecraftforge.binarypatcher.tests;
 
@@ -24,7 +10,6 @@ import net.minecraftforge.binarypatcher.Patcher;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.powermock.reflect.Whitebox;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -54,9 +39,8 @@ public class BinPatchGeneratorTest {
 
     private static Map<String, byte[]> loadPatches(File file) throws Exception {
         Patcher patcher = new Patcher(null, null); //To read to example patches
-        Whitebox.setInternalState(patcher, "patches", new TreeMap<>()); //Set to a tree map to preserve order to rebuild an identical file
-        Whitebox.invokeMethod(patcher, "loadPatches", file, null);
-        Map<String, List<Patch>> patches = Whitebox.getInternalState(patcher, "patches");
+        patcher.loadPatches(file, null);
+        Map<String, List<Patch>> patches = patcher.getPatches();
         Map<String, byte[]> patchesProcessed = new TreeMap<>(); //preserve order
         for (Map.Entry<String, List<Patch>> entry : patches.entrySet()) {
             List<Patch> patchesForEntry = entry.getValue();
@@ -70,10 +54,11 @@ public class BinPatchGeneratorTest {
     private static byte[] writePatches(Map<String, byte[]> patches) throws Exception {
         Map<String, byte[]> sortedMap = new TreeMap<>(); //preserve order
         Generator generator = new Generator(null); //dummy for writing patches
-        for (Map.Entry<String, byte[]> entry : patches.entrySet())
-            sortedMap.put(Whitebox.invokeMethod(generator, "toJarName", entry.getKey()), entry.getValue());
-        byte[] jarData = Whitebox.invokeMethod(generator, "createJar", sortedMap);
-        return Whitebox.invokeMethod(generator, "lzma", (Object) jarData);
+        for (Map.Entry<String, byte[]> entry : patches.entrySet()) {
+            sortedMap.put(generator.toJarName(entry.getKey()), entry.getValue());
+        }
+        byte[] jarData = generator.createJar(sortedMap);
+        return generator.lzma(jarData);
     }
 
     /**

@@ -1,30 +1,16 @@
 /*
- * BinaryPatcher
- * Copyright (c) 2016-2018.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation version 2.1
- * of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ * Copyright (c) Forge Development LLC
+ * SPDX-License-Identifier: LGPL-2.1-only
  */
 package net.minecraftforge.binarypatcher;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.zip.Adler32;
 
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
 import com.nothome.delta.Delta;
 
 public class Patch {
@@ -55,24 +41,30 @@ public class Patch {
         return toBytes(false);
     }
     public byte[] toBytes(boolean legacy) {
-        ByteArrayDataOutput out = ByteStreams.newDataOutput(data.length + obf.length() + srg.length() + 1);
-        if (legacy) {
-            if (data.length == 0)
-                return null; //Legacy doesn't support deleting, so just skip
-            out.writeUTF(obf);
-            out.writeUTF(obf.replace('/', '.'));
-            out.writeUTF(srg.replace('/', '.'));
-        } else {
-            out.writeByte(1); //Version -- Future compatibility
-            out.writeUTF(obf);
-            out.writeUTF(srg);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream(data.length + obf.length() + srg.length() + 1);
+        DataOutputStream out = new DataOutputStream(bos);
+        try {
+            if (legacy) {
+                if (data.length == 0)
+                    return null; //Legacy doesn't support deleting, so just skip
+                out.writeUTF(obf);
+                out.writeUTF(obf.replace('/', '.'));
+                out.writeUTF(srg.replace('/', '.'));
+            } else {
+                out.writeByte(1); //Version -- Future compatibility
+                out.writeUTF(obf);
+                out.writeUTF(srg);
+            }
+            out.writeBoolean(exists); //Exists in clean
+            if (exists)
+                out.writeInt(checksum); //Adler32
+            out.writeInt(data.length); //If removed, diff.length == 0
+            out.write(data);
+            out.flush();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
-        out.writeBoolean(exists); //Exists in clean
-        if (exists)
-            out.writeInt(checksum); //Adler32
-        out.writeInt(data.length); //If removed, diff.length == 0
-        out.write(data);
-        return out.toByteArray();
+        return bos.toByteArray();
     }
 
     public static Patch from(InputStream stream) throws IOException {
