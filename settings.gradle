@@ -1,29 +1,33 @@
-pluginManagement {
-    repositories {
-        gradlePluginPortal()
-        maven { url = 'https://maven.minecraftforge.net/' }
-    }
-}
-
 plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.7.0'
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.10.0'
 }
 
 dependencyResolutionManagement {
-    versionCatalogs {
-        libs {
-            version('junit', '5.10.0')
-            library('junit-api', 'org.junit.jupiter', 'junit-jupiter-api').versionRef('junit')
-            library('junit-engine', 'org.junit.jupiter', 'junit-jupiter-engine').versionRef('junit')
-            library('junit-platform-launcher', 'org.junit.platform:junit-platform-launcher:1.10.0')
-            bundle('junit-runtime', ['junit-engine', 'junit-platform-launcher'])
-
-            library('srgutils', 'net.minecraftforge:srgutils:0.5.6')
-            library('jopt-simple', 'net.sf.jopt-simple:jopt-simple:6.0-alpha-3')
-            library('lzma', 'com.github.jponge:lzma-java:1.3')
-            library('xdelta', 'com.nothome:javaxdelta:2.0.1')
-        }
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.minecraftforge.net' }
     }
+
+    //@formatter:off
+    versionCatalogs.register('libs') {
+        plugin 'licenser',    'net.minecraftforge.licenser'        version '1.2.0'
+        plugin 'gradleutils', 'net.minecraftforge.gradleutils'     version '2.6.0'
+        plugin 'versions',    'com.github.ben-manes.versions'      version '0.52.0'
+        plugin 'shadow',      'com.gradleup.shadow'                version '9.0.0-beta15'
+        plugin 'jarsigner',   'net.minecraftforge.gradlejarsigner' version '1.0.5'
+
+        version 'junit', '5.10.0'
+        library 'junit-api',               'org.junit.jupiter',  'junit-jupiter-api'       versionRef 'junit'
+        library 'junit-engine',            'org.junit.jupiter',  'junit-jupiter-engine'    versionRef 'junit'
+        library 'junit-platform-launcher', 'org.junit.platform', 'junit-platform-launcher' version '1.10.0'
+        bundle 'junit-runtime', ['junit-engine', 'junit-platform-launcher']
+
+        library 'srgutils',    'net.minecraftforge', 'srgutils'    version '0.5.6'
+        library 'jopt-simple', 'net.sf.jopt-simple', 'jopt-simple' version '6.0-alpha-3'
+        library 'lzma',        'com.github.jponge',  'lzma-java'   version '1.3'
+        library 'xdelta',      'com.nothome',        'javaxdelta'  version '2.0.1'
+    }
+    //@formatter:on
 }
 
 rootProject.name = 'BinaryPatcher'
