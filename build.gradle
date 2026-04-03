@@ -20,7 +20,7 @@ version = gitversion.tagOffset
 
 println "Version: $version"
 
-jarSigner.autoDetect()
+jarSigner.autoDetect('forge')
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(8)
@@ -60,8 +60,27 @@ tasks.named('jar', Jar) {
 
 tasks.named('shadowJar', ShadowJar) {
     archiveClassifier = 'fatjar'
-
     jarSigner.sign(it)
+    
+    // Meta stuff we don't need
+    exclude('com/google/errorprone/**')
+    exclude('META-INF/maven/**')
+    exclude('META-INF/proguard/**')
+    
+    // We shouldn't ever need to care about conflicts as this is an executable jar, but just be safe
+    relocate('net.minecraftforge.srgutils', 'net.minecraftforge.binarypatcher.shadow.srgutils')
+    relocate('joptsimple',                  'net.minecraftforge.binarypatcher.shadow.joptsimple')
+    relocate('at.spardat.xma.xdelta',       'net.minecraftforge.binarypatcher.shadow.xdelta')
+    relocate('com.nothome.delta',           'net.minecraftforge.binarypatcher.shadow.delta')
+    relocate('gnu.trove',                   'net.minecraftforge.binarypatcher.shadow.trove')
+    relocate('lzma',                        'net.minecraftforge.binarypatcher.shadow.lzma')
+    relocate('org.cservenak.streams',       'net.minecraftforge.binarypatcher.shadow.streams')
+    
+    // Rewrite JOpt's message files, so that help text is displayed nicely.
+    transform(com.github.jengelman.gradle.plugins.shadow.transformers.PropertiesFileTransformer) {
+        paths = [ 'Messages.properties$' ]
+        keyTransformer = { key -> 'net.minecraftforge.binarypatcher.shadow.' + key }
+    }
 }
 
 artifacts {

@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -45,6 +46,8 @@ public class Patcher {
     private boolean patchedOnly = false;
     private boolean pack200 = false;
     private boolean legacy = false;
+    private boolean store = false;
+    private String marker = null;
 
     public Patcher(File clean, File output) {
         this.clean = clean;
@@ -76,6 +79,18 @@ public class Patcher {
 
     public Patcher legacy(boolean value) {
         this.legacy = value;
+        return this;
+    }
+
+    public Patcher store() {
+        return this.store(true);
+    }
+    public Patcher store(boolean value) {
+        this.store = value;
+        return this;
+    }
+    public Patcher marker(String value) {
+        this.marker = value;
         return this;
     }
 
@@ -118,6 +133,9 @@ public class Patcher {
 
         try (ZipInputStream zclean = new ZipInputStream(new FileInputStream(clean));
              ZipOutputStream zpatched = new ZipOutputStream(new FileOutputStream(output))) {
+            // Disable compression, this wastes space on disc, but fixes issues related to xlib-ng causing compression differences
+            if (store)
+                zpatched.setMethod(ZipOutputStream.STORED);
 
             Set<String> processed = new HashSet<>();
             ZipEntry entry;
@@ -134,18 +152,41 @@ public class Patcher {
                             data = patch(data, patch);
                         }
                         if (data.length != 0) {
-                            zpatched.putNextEntry(getNewEntry(entry.getName()));
-                            zpatched.write(data);
+                            if (store) {
+                                Util.store(zpatched, entry.getName(), data);
+                            } else {
+                                zpatched.putNextEntry(getNewEntry(entry.getName()));
+                                zpatched.write(data);
+                            }
                         }
                     } else if (!patchedOnly) {
                         log("  Copying " + entry.getName());
+                        if (store) {
+                            Util.store(zpatched, entry.getName(), Util.toByteArray(zclean));
+                        } else {
+                            zpatched.putNextEntry(getNewEntry(entry.getName()));
+                            Util.copy(zclean, zpatched);
+                        }
+                    }
+                } else if (keepData) {
+                    if (Util.isSignature(entry.getName())) {
+                        log("  Skipping " + entry.getName());
+                        continue;
+                    }
+
+                    if ("meta-inf/manifest.mf".equals(entry.getName().toLowerCase(Locale.ROOT))) {
+                        log("  Fixing Manifest");
+                        Util.cleanManifest(zclean, zpatched, entry.getName(), store);
+                        continue;
+                    }
+
+                    log("  Copying " + entry.getName());
+                    if (store) {
+                        Util.store(zpatched, entry.getName(), Util.toByteArray(zclean));
+                    } else {
                         zpatched.putNextEntry(getNewEntry(entry.getName()));
                         Util.copy(zclean, zpatched);
                     }
-                } else if (keepData) {
-                    log("  Copying " + entry.getName());
-                    zpatched.putNextEntry(getNewEntry(entry.getName()));
-                    Util.copy(zclean, zpatched);
                 }
             }
 
@@ -164,10 +205,18 @@ public class Patcher {
                     data = patch(data, patch);
                 }
                 if (data.length != 0) {
-                    zpatched.putNextEntry(getNewEntry(key + ".class"));
-                    zpatched.write(data);
+                    if (store) {
+                        Util.store(zpatched, key + ".class", data);
+                    } else {
+                        zpatched.putNextEntry(getNewEntry(key + ".class"));
+                        zpatched.write(data);
+                    }
                 }
             }
+
+            // Adds a empty file with a specified name, this is a work around for bad launchers to don't build the classpath like the vanilla launcher does.
+            if (marker != null)
+                Util.store(zpatched, marker, new byte[0]);
          }
     }
 

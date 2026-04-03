@@ -102,6 +102,23 @@ public class Generator {
         });
     }
 
+    public void loadSideAnnotationStripper(File file) throws IOException {
+        List<String> lines = Files.readAllLines(file.toPath());
+        for (String line : lines) {
+            int idx = line.indexOf('#');
+            if (idx == 0) return;
+
+            if (idx != -1) line = line.substring(0, idx - 1);
+            if (line.charAt(0) == '\t') line = line.substring(1);
+            line = line.trim();
+            idx = line.indexOf(' ');
+            if (idx == -1)
+                continue;
+
+            patches.add(line.substring(0, idx));
+        }
+    }
+
     public void create() throws IOException {
         Map<String, byte[]> binpatches = new TreeMap<>();
         for (PatchSet set : sets) {
@@ -164,7 +181,10 @@ public class Generator {
                             String srg = m2o.get(cls);
                             if (srg == null) {
                                 int idx = cls.indexOf('$');
-                                srg = path + '$' + cls.substring(idx + 1);
+                                if (idx == -1)
+                                    srg = path;
+                                else
+                                    srg = path + '$' + cls.substring(idx + 1);
                             }
 
                             byte[] cleanData = getData(zclean, cls);

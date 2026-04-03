@@ -31,11 +31,16 @@ public class ConsoleTool {
         OptionSpec<File> createO = parser.acceptsAll(Arrays.asList("dirty", "create")).withRequiredArg().ofType(File.class);
         OptionSpec<File> patchesO = parser.accepts("patches").withRequiredArg().ofType(File.class);
         OptionSpec<File> srgO = parser.accepts("srg").withRequiredArg().ofType(File.class);
+        OptionSpec<File> sasO = parser.accepts("sas").withRequiredArg().ofType(File.class);
+        OptionSpec<?>[] createOptions = new OptionSpec[] { patchesO, srgO, sasO };
 
         // Apply arguments
         OptionSpec<File> applyO = parser.accepts("apply").withRequiredArg().ofType(File.class);
         OptionSpec<Void> dataO = parser.accepts("data");
         OptionSpec<Void> unpatchedO = parser.accepts("unpatched");
+        OptionSpec<Void> storeO = parser.accepts("store", "Disable compression in output jar file, this is a workaround for zlib-ng differences");
+        OptionSpec<String> markerO = parser.accepts("marker").withRequiredArg();
+        OptionSpec<?>[] applyOptions = new OptionSpec[] { dataO, unpatchedO, storeO, markerO };
 
         try {
             OptionSet options = parser.parse(args);
@@ -54,8 +59,10 @@ public class ConsoleTool {
                 err("Cannot specify --apply and --create at the same time!");
 
             if (options.has(createO)) {
-                if (options.has(dataO))      err("Connot specify --create/--dirty and --data at the same time!");
-                if (options.has(unpatchedO)) err("Connot specify --create/--dirty and --unpatched at the same time!");
+                for (OptionSpec<?> opt : applyOptions) {
+                    if (options.has(opt))
+                        err("Connot specify --create/--dirty and --" + opt.options().get(0) + " at the same time!");
+                }
 
                 List<File> clean = options.valuesOf(cleanO);
                 List<File> dirty = options.valuesOf(createO);
@@ -107,6 +114,13 @@ public class ConsoleTool {
                     }
                 }
 
+                if (options.has(sasO)) {
+                    for (File file : options.valuesOf(sasO)) {
+                        log("  SAS:     " + file);
+                        gen.loadSideAnnotationStripper(file);
+                    }
+                }
+
                 if (options.has(srgO)) {
                     for (File file : options.valuesOf(srgO)) {
                         log("  SRG:     " + file);
@@ -117,15 +131,22 @@ public class ConsoleTool {
                 gen.create();
             } else if (options.has(applyO)) {
                 File clean_jar = options.valueOf(cleanO);
+                for (OptionSpec<?> opt : createOptions) {
+                    if (options.has(opt))
+                        err("Connot specify --apply and --" + opt.options().get(0) + " at the same time!");
+                }
 
-                if (options.has(srgO))     err("Connot specify --apply and --srg at the same time!");
-                if (options.has(patchesO)) err("Connot specify --apply and --patches at the same time!");
+                String marker = options.has(markerO) ? options.valueOf(markerO) : null;
 
                 Patcher patcher = new Patcher(clean_jar, output)
                     .keepData(options.has(dataO))
                     .includeUnpatched(options.has(unpatchedO))
                     .pack200(pack200)
+                    .store(options.has(storeO))
                     .legacy(legacy);
+
+                if (marker != null)
+                    patcher.marker(marker);
 
                 log("Applying: ");
                 log("  Clean:     " + clean_jar);
@@ -134,6 +155,8 @@ public class ConsoleTool {
                 log("  Unpatched: " + options.has(unpatchedO));
                 log("  Pack200:   " + pack200);
                 log("  Legacy:    " + legacy);
+                log("  Store:     " + options.has(storeO));
+                log("  Marker:    " + marker);
 
                 List<File> patches = options.valuesOf(applyO);
                 List<String> prefixes = options.valuesOf(prefixO);
