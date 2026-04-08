@@ -31,8 +31,9 @@ public class ConsoleTool {
         OptionSpec<File> createO = parser.acceptsAll(Arrays.asList("dirty", "create")).withRequiredArg().ofType(File.class);
         OptionSpec<File> patchesO = parser.accepts("patches").withRequiredArg().ofType(File.class);
         OptionSpec<File> srgO = parser.accepts("srg").withRequiredArg().ofType(File.class);
+        OptionSpec<Void> reverseSrgO = parser.accepts("reverse-srg");
         OptionSpec<File> sasO = parser.accepts("sas").withRequiredArg().ofType(File.class);
-        OptionSpec<?>[] createOptions = new OptionSpec[] { patchesO, srgO, sasO };
+        OptionSpec<?>[] createOptions = new OptionSpec[] { patchesO, srgO, reverseSrgO, sasO };
 
         // Apply arguments
         OptionSpec<File> applyO = parser.accepts("apply").withRequiredArg().ofType(File.class);
@@ -122,10 +123,10 @@ public class ConsoleTool {
                 }
 
                 if (options.has(srgO)) {
-                    for (File file : options.valuesOf(srgO)) {
-                        log("  SRG:     " + file);
-                        gen.loadMappings(file);
-                    }
+                    boolean reverse = options.has(reverseSrgO);
+                    File file = options.valueOf(srgO);
+                    log("  SRG:     " + file + (reverse ? " (reversed)" : ""));
+                    gen.loadMappings(file, reverse);
                 }
 
                 gen.create();

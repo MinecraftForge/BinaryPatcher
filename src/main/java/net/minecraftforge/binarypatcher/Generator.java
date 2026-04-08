@@ -14,7 +14,7 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -39,14 +39,14 @@ public class Generator {
     public static final String EXTENSION = ".lzma";
     private static final byte[] EMPTY_DATA = new byte[0];
 
-    private final Map<String, String> o2m = new HashMap<>();
-    private final Map<String, String> m2o = new HashMap<>();
     private final Set<String> patches = new TreeSet<>();
 
     private final File output;
     private final List<PatchSet> sets = new ArrayList<>();
     private boolean pack200 = false;
     private boolean legacy = false;
+    private IMappingFile o2m = null;
+    private IMappingFile m2o = null;
 
     public Generator(File output) {
         this.output = output;
@@ -85,12 +85,21 @@ public class Generator {
         return this;
     }
 
-    public void loadMappings(File srg) throws IOException {
+    /*
+     * This is used when we do obfed binary patches
+     * This should be the obf2srg mapping
+     * We only use the class names and this is only used
+     * to map the patch file class names to the obfed class files
+     */
+    public void loadMappings(File srg, boolean reverse) throws IOException {
         IMappingFile map = IMappingFile.load(srg);
-        map.getClasses().forEach(cls -> {
-            o2m.put(cls.getOriginal(), cls.getMapped());
-            m2o.put(cls.getOriginal(), cls.getMapped());
-        });
+        if (reverse) {
+            o2m = map.reverse();
+            m2o = map;
+        } else {
+            o2m = map;
+            m2o = map.reverse();
+        }
     }
 
     public void loadPatches(File root) throws IOException {
@@ -138,33 +147,39 @@ public class Generator {
         }
     }
 
+    private void gatherClasses(Map<String, Set<String>> entries, ZipFile archive) {
+        for (Enumeration<? extends ZipEntry> itr = archive.entries(); itr.hasMoreElements();) {
+            String name = itr.nextElement().getName();
+            if (!name.endsWith(".class"))
+                continue;
+            name = name.substring(0, name.length() - 6);
+            int idx = name.indexOf('$');
+            String outer = idx == -1 ? name : name.substring(0, idx);
+            entries.computeIfAbsent(outer, k -> new HashSet<>()).add(name);
+        }
+    }
+
     private Map<String, byte[]> gatherPatches(File clean, File dirty) throws IOException {
         Map<String, byte[]> binpatches = new TreeMap<>();
         try (ZipFile zclean = new ZipFile(clean);
             ZipFile zdirty = new ZipFile(dirty)){
 
+            // This is a map of all classes to their 'sibling' classes.
+            // Specifically all outer classes grouped with their inner classes.
+            // This is done because when we modify a class, it could have durastic changes to the synthetic inner classes.
+            // So we jus assume that if we patch one thing, we patch all inner classes
             Map<String, Set<String>> entries = new HashMap<>();
-            Collections.list(zclean.entries()).stream().map(e -> e.getName()).filter(e -> e.endsWith(".class")).map(e -> e.substring(0, e.length() - 6)).forEach(e -> {
-                int idx = e.indexOf('$');
-                if (idx != -1)
-                    entries.computeIfAbsent(e.substring(0, idx), k -> new HashSet<>()).add(e);
-                else
-                    entries.computeIfAbsent(e, k -> new HashSet<>()).add(e);
-            });
-            Collections.list(zdirty.entries()).stream().map(e -> e.getName()).filter(e -> e.endsWith(".class")).map(e -> e.substring(0, e.length() - 6)).forEach(e -> {
-                int idx = e.indexOf('$');
-                if (idx != -1)
-                    entries.computeIfAbsent(e.substring(0, idx), k -> new HashSet<>()).add(e);
-                else
-                    entries.computeIfAbsent(e, k -> new HashSet<>()).add(e);
-            });
+            gatherClasses(entries, zclean);
+            gatherClasses(entries, zdirty);
 
             log("Creating patches:");
             log("  Clean: " + clean);
             log("  Dirty: " + dirty);
             if (patches.isEmpty()) { //No patches, assume full set!
                 for (String cls : entries.keySet()) {
-                   String srg = m2o.getOrDefault(cls, cls);
+                    // We use the srg name to make the names in the archive readable.
+                    // Doesn't actually effect the functionality, so is optional
+                    String srg = o2m == null ? cls : o2m.remapClass(cls);
                     byte[] cleanData = getData(zclean, cls);
                     byte[] dirtyData = getData(zdirty, cls);
                     if (!Arrays.equals(cleanData, dirtyData)) {
@@ -175,17 +190,12 @@ public class Generator {
                 }
             } else {
                 for (String path : patches) {
-                    String obf = o2m.getOrDefault(path, path);
+                    // Map the patch dev name, to prodution name
+                    String obf = m2o == null ? path : m2o.remapClass(path);
+
                     if (entries.containsKey(obf)) {
                         for (String cls : entries.get(obf)) {
-                            String srg = m2o.get(cls);
-                            if (srg == null) {
-                                int idx = cls.indexOf('$');
-                                if (idx == -1)
-                                    srg = path;
-                                else
-                                    srg = path + '$' + cls.substring(idx + 1);
-                            }
+                            String srg = o2m == null ? cls : o2m.remapClass(cls);
 
                             byte[] cleanData = getData(zclean, cls);
                             byte[] dirtyData = getData(zdirty, cls);
