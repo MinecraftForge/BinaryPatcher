@@ -6,9 +6,11 @@ plugins {
     id 'maven-publish'
     alias libs.plugins.licenser
     alias libs.plugins.gradleutils
+    alias libs.plugins.gitversion
     alias libs.plugins.versions
     alias libs.plugins.shadow
     alias libs.plugins.jarsigner
+    alias libs.plugins.changelog
 }
 
 final projectDisplayName = 'Binary Patcher'
@@ -25,6 +27,10 @@ jarSigner.autoDetect('forge')
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(8)
     withSourcesJar()
+}
+
+changelog {
+    fromBase()
 }
 
 dependencies {
@@ -93,6 +99,9 @@ test {
 
 publishing {
     publications.register('mavenJava', MavenPublication) {
+        changelog.publish(it)
+        gradleutils.promote(it)
+
         from components.java
 
         artifactId = projectArtifactId
@@ -101,7 +110,7 @@ publishing {
             name = projectDisplayName
             description = project.description
 
-            gradleutils.pom.setGitHubDetails pom
+            gradleutils.pom.addRemoteDetails(pom)
 
             licenses {
                 license gradleutils.pom.licenses.LGPLv2_1
