@@ -114,17 +114,21 @@ public class Generator {
     public void loadSideAnnotationStripper(File file) throws IOException {
         List<String> lines = Files.readAllLines(file.toPath());
         for (String line : lines) {
+            // Strip comments
             int idx = line.indexOf('#');
-            if (idx == 0) return;
-
+            if (idx == 0) continue;
             if (idx != -1) line = line.substring(0, idx - 1);
+
+            // Account for groups
             if (line.charAt(0) == '\t') line = line.substring(1);
             line = line.trim();
-            idx = line.indexOf(' ');
-            if (idx == -1)
-                continue;
 
-            patches.add(line.substring(0, idx));
+            // Methods, we only care about the class name
+            idx = line.indexOf(' ');
+            if (idx != -1)
+                line = line.substring(0, idx);
+
+            patches.add(line);
         }
     }
 

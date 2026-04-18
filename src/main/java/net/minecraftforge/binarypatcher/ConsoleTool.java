@@ -72,7 +72,7 @@ public class ConsoleTool {
                 log("Generating: ");
                 log("  Output:  " + output);
                 log("  Pack200: " + pack200);
-                log("  Legacy:    " + legacy);
+                log("  Legacy:  " + legacy);
 
                 Generator gen = new Generator(output).pack200(pack200).legacy(legacy);
 
@@ -82,9 +82,9 @@ public class ConsoleTool {
                         int max = Math.max(clean.size(), Math.max(dirty.size(), prefixes.size()));
                         for (int x = 0; x < max; x++) {
                             log("Set #" + x + ':');
-                            log("  Prefix: " + (x < prefixes.size() ? prefixes.get(x) : null));
-                            log("  Clean:  " + (x < clean.size() ? clean.get(x) : null));
-                            log("  Dirty:  " + (x < dirty.size() ? dirty.get(x) : null));
+                            log("  Prefix:  " + (x < prefixes.size() ? prefixes.get(x) : null));
+                            log("  Clean:   " + (x < clean.size() ? clean.get(x) : null));
+                            log("  Dirty:   " + (x < dirty.size() ? dirty.get(x) : null));
                         }
                         err("Unbalanced patchset arguments, see log for details");
                     }
@@ -102,8 +102,8 @@ public class ConsoleTool {
                         log("    Dirty: " + dirty.get(0));
                         gen.addSet(clean.get(0), dirty.get(0), prefixes.get(0));
                     } else {
-                        log("  Clean: " + clean.get(0));
-                        log("  Dirty: " + dirty.get(0));
+                        log("  Clean:   " + clean.get(0));
+                        log("  Dirty:   " + dirty.get(0));
                         gen.addSet(clean.get(0), dirty.get(0), null);
                     }
                 }
