@@ -32,6 +32,7 @@ import com.nothome.delta.GDiffPatcher;
 
 import lzma.sdk.lzma.Decoder;
 import lzma.streams.LzmaInputStream;
+import net.minecraftforge.util.hash.HashFunction;
 
 public class Patcher {
     public static final String EXTENSION = ".lzma";
@@ -42,6 +43,7 @@ public class Patcher {
 
     private final File clean;
     private final File output;
+    private boolean verbose = false;
     private boolean keepData = false;
     private boolean patchedOnly = false;
     private boolean pack200 = false;
@@ -52,6 +54,11 @@ public class Patcher {
     public Patcher(File clean, File output) {
         this.clean = clean;
         this.output = output;
+    }
+
+    public Patcher verbose(boolean value) {
+        this.verbose = value;
+        return this;
     }
 
     public Patcher keepData(boolean value) {
@@ -97,7 +104,10 @@ public class Patcher {
     // This can be called multiple times, if patchsets are built on top of eachother.
     // They will be applied in the order that the patch files were loaded.
     public void loadPatches(File file, String prefix) throws IOException {
-        log("Loading patches file: " + file);
+        if (verbose)
+            log("Loading patches file: " + file + " MD5: " + HashFunction.md5().hash(file));
+        else
+            log("Loading patches file: " + file);
 
         try (InputStream input = new FileInputStream(file)) {
             InputStream stream = new LzmaInputStream(input, new Decoder());
@@ -112,21 +122,30 @@ public class Patcher {
 
             JarInputStream jar = new JarInputStream(stream);
 
+            int count = 0;
             JarEntry entry;
             while ((entry = jar.getNextJarEntry()) != null) {
                 String name = entry.getName();
                 if (name.endsWith(".binpatch") && (prefix == null || name.startsWith(prefix + '/'))) {
-                    log("  Reading patch " + entry.getName());
+                    count++;
+                    if (verbose)
+                        log("  Reading patch " + entry.getName());
                     Patch patch = Patch.from(jar, this.legacy);
-                    log("    Checksum: " + Integer.toHexString(patch.checksum) + " Exists: " + patch.exists);
+                    if (verbose)
+                        log("    Checksum: " + Integer.toHexString(patch.checksum) + " Exists: " + patch.exists);
                     patches.computeIfAbsent(patch.obf, k -> new ArrayList<>()).add(patch);
                 }
             }
+            log("  Loaded " + count + " patches");
         }
     }
 
     public void process() throws IOException {
-        log("Processing: " + clean);
+        if (verbose)
+            log("Processing: " + clean + " MD5: " + HashFunction.md5().hash(clean));
+        else
+            log("Processing: " + clean);
+
         if (output.exists() && !output.delete())
             throw new IOException("Failed to delete existing output file: " + output);
 
@@ -160,7 +179,8 @@ public class Patcher {
                             }
                         }
                     } else if (!patchedOnly) {
-                        log("  Copying " + entry.getName());
+                        if (verbose)
+                            log("  Copying " + entry.getName());
                         if (store) {
                             Util.store(zpatched, entry.getName(), Util.toByteArray(zclean));
                         } else {
@@ -170,7 +190,8 @@ public class Patcher {
                     }
                 } else if (keepData) {
                     if (Util.isSignature(entry.getName())) {
-                        log("  Skipping " + entry.getName());
+                        if (verbose)
+                            log("  Skipping " + entry.getName());
                         continue;
                     }
 
@@ -180,7 +201,8 @@ public class Patcher {
                         continue;
                     }
 
-                    log("  Copying " + entry.getName());
+                    if (verbose)
+                        log("  Copying " + entry.getName());
                     if (store) {
                         Util.store(zpatched, entry.getName(), Util.toByteArray(zclean));
                     } else {

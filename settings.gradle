@@ -24,6 +24,7 @@ dependencyResolutionManagement {
         library 'junit-platform-launcher', 'org.junit.platform', 'junit-platform-launcher' version '1.10.0'
         bundle 'junit-runtime', ['junit-engine', 'junit-platform-launcher']
 
+        library 'hashutils',   'net.minecraftforge', 'hash-utils'  version '0.2.3'
         library 'srgutils',    'net.minecraftforge', 'srgutils'    version '0.6.6'
         library 'jopt-simple', 'net.sf.jopt-simple', 'jopt-simple' version '6.0-alpha-3'
         library 'lzma',        'com.github.jponge',  'lzma-java'   version '1.3'

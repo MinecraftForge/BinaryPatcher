@@ -26,6 +26,7 @@ public class ConsoleTool {
         OptionSpec<String> prefixO = parser.accepts("prefix").withRequiredArg();
         OptionSpec<Void> packO = parser.accepts("pack200");
         OptionSpec<Void> legacyO = parser.accepts("legacy", "Uses the legacy patch header format, also implies --pack200. NOT RECOMENDED.");
+        OptionSpec<Void> verboseO = parser.accepts("verbose", "Outputs more verbose log messages");
 
         // Create arguments
         OptionSpec<File> createO = parser.acceptsAll(Arrays.asList("dirty", "create")).withRequiredArg().ofType(File.class);
@@ -140,6 +141,7 @@ public class ConsoleTool {
                 String marker = options.has(markerO) ? options.valueOf(markerO) : null;
 
                 Patcher patcher = new Patcher(clean_jar, output)
+                    .verbose(options.has(verboseO))
                     .keepData(options.has(dataO))
                     .includeUnpatched(options.has(unpatchedO))
                     .pack200(pack200)
